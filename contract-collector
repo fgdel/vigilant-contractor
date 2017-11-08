@@ -12,7 +12,6 @@ contract Register {
     address public owner;
     bytes32 public name; //contract name 
     uint public regAmount;
-    uint public monthlyRegisterAmount;
     uint public contractNumber; //get from web3
     uint32 public numberOfRegistrations;
     
@@ -26,9 +25,8 @@ contract Register {
         address registrar;
         uint totalRegisterStart;
         uint totalRemaining;
-        uint8 monthsRemaining;
-        uint paymentPerMonth;
     }
+    
     registerData[] public registrars;
     mapping (address => uint) public collectorIDs;
     
@@ -57,7 +55,8 @@ contract Register {
             revert();
         _; 
     }
-    //collectorCancelMonthly has its own code that makes sure people who have never contributed can't withdraw
+
+
     modifier onlyCollectors {
         if (msg.sender == creator) 
             revert();
