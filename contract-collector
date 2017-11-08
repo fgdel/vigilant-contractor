@@ -50,7 +50,7 @@ contract Register {
     
 /*********************************************Modifiers, Events, enums***************************************************************************/
 
-    modifier onlyItem {
+    modifier onlyCreator {
         if (msg.sender != creator) 
             revert();
         _; 
@@ -221,10 +221,10 @@ contract Register {
 contract RegFactory {
     bytes32[] public names;
     address[] public newContracts;
-    address[] public originalItems;
+    address[] public originalCreators;
     address public owner;
     
-    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractItem);
+    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractCreator);
     
     //Owner is passed onto every Register Contract, so that owner can have power to adjust ledger
     function RegFactory () {
@@ -239,7 +239,7 @@ contract RegFactory {
         }
         
         uint contractNumber = newContracts.length;
-        originalItems.push(msg.sender);
+        originalCreators.push(msg.sender);
         address newContract = new Register(name, contractNumber);
         newContracts.push(newContract);
         names.push(name);
@@ -255,8 +255,8 @@ contract RegFactory {
         return newContracts[i];
     }
     
-    function getOriginalItem(uint i) constant external returns (address originalItem) {
-        return originalItem[i];
+    function getOriginalCreator(uint i) constant external returns (address originalCreator) {
+        return originalCreator[i];
     }
 
     function getNameArray() constant external returns(bytes32[] contractName) {
@@ -266,7 +266,7 @@ contract RegFactory {
         return newContracts;
     }
     
-    function getOriginalItemArray() constant external returns (address[] originalCreator) {
+    function getOriginalCreatorArray() constant external returns (address[] originalCreator) {
         return originalCreators;
     }
     
