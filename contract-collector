@@ -63,8 +63,9 @@ contract Register {
         _;
     }
     
-    //owner is the Club who put the RegFactory on the blockchain 
+    //owner is the dApp developer who put the RegFactory on the blockchain 
     //They have the ability to Fix contract ledger if there are mistakes
+    //This is a prototype feature
     modifier onlyOwner {
         if (msg.sender != owner) 
             revert();
