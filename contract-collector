@@ -50,7 +50,7 @@ contract Register {
     
 /*********************************************Modifiers, Events, enums***************************************************************************/
 
-    modifier onlyCreator {
+    modifier onlyItem {
         if (msg.sender != creator) 
             revert();
         _; 
@@ -106,8 +106,8 @@ contract Register {
 	}
 
 	// manually perform healthcheck.
-	// 		0 = reset maintenance_mode, even in emergency
-	// 		1 = perform health check
+	// 	0 = reset maintenance_mode, even in emergency
+	// 	1 = perform health check
 	//    255 = set maintenance_mode to maintenance_emergency (no newPolicy
 	function performHealthCheck(uint8 _maintenance_mode) external onlyOwner {
 		maintenance_mode = _maintenance_mode;
@@ -121,7 +121,7 @@ contract Register {
 
 		ledger[_from] -= uint(_amount);
 		ledger[_to] += uint(_amount);
-        LOG_ChangeToFullLedger (ledger[allCollectorsEver], ledger[collectorsNow], ledger[totalRegistersEver], ledger[totalRegistersWithdrawn], ledger[totalRegistersCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn]);
+        	LOG_ChangeToFullLedger (ledger[allCollectorsEver], ledger[collectorsNow], ledger[totalRegistersEver], ledger[totalRegistersWithdrawn], ledger[totalRegistersCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn]);
 	}
     //if necessary ammend specific registrars struct
     function auditCollector(uint _totalRemaining, uint _collectorID) external onlyOwner {
@@ -221,10 +221,10 @@ contract Register {
 contract RegFactory {
     bytes32[] public names;
     address[] public newContracts;
-    address[] public originalCreators;
+    address[] public originalItems;
     address public owner;
     
-    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractCreator);
+    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractItem);
     
     //Owner is passed onto every Register Contract, so that owner can have power to adjust ledger
     function RegFactory () {
@@ -239,7 +239,7 @@ contract RegFactory {
         }
         
         uint contractNumber = newContracts.length;
-        originalCreators.push(msg.sender);
+        originalItems.push(msg.sender);
         address newContract = new Register(name, contractNumber);
         newContracts.push(newContract);
         names.push(name);
@@ -255,8 +255,8 @@ contract RegFactory {
         return newContracts[i];
     }
     
-    function getOriginalCreator(uint i) constant external returns (address originalCreator) {
-        return originalCreators[i];
+    function getOriginalItem(uint i) constant external returns (address originalItem) {
+        return originalItem[i];
     }
 
     function getNameArray() constant external returns(bytes32[] contractName) {
@@ -266,7 +266,7 @@ contract RegFactory {
         return newContracts;
     }
     
-    function getOriginalCreatorArray() constant external returns (address[] originalCreator) {
+    function getOriginalItemArray() constant external returns (address[] originalCreator) {
         return originalCreators;
     }
     
