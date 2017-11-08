@@ -1,0 +1,279 @@
+/**************************************************************************************************************************
+Note: acknowledgements to Udemy tutor David Kajpust: Blockchain Development: Build a dApp with Solidity
+***************************************************************************************************************************/
+
+pragma solidity ^0.4.13;
+
+contract Register {
+    
+/*********************************************STATE VARIABLES***************************************************************************/
+
+    address public creator;
+    address public owner;
+    bytes32 public name; //contract name 
+    uint public regAmount;
+    uint public monthlyRegisterAmount;
+    uint public contractNumber; //get from web3
+    uint32 public numberOfRegistrations;
+    
+    //maintenance modes 
+    uint8 constant maintenanceNone = 0;
+    uint8 constant maintenance_BalTooHigh = 1;
+    uint8 constant maintenance_Emergency = 255;
+    uint8 public maintenance_mode;
+
+    struct registerData {
+        address registrar;
+        uint totalRegisterStart;
+        uint totalRemaining;
+        uint8 monthsRemaining;
+        uint paymentPerMonth;
+    }
+    registerData[] public registrars;
+    mapping (address => uint) public collectorIDs;
+    
+    //accounting stuff
+    uint[11] public ledger;
+    //number of collectors
+    uint8 constant allCollectorsEver = 0;
+    uint8 constant collectorsNow = 1;
+    uint8 constant collectorsFinished = 2;
+    uint8 constant collectorsCancelled = 3;
+    //number of registers
+    uint8 constant totalRegistersEver = 4;
+    uint8 constant totalRegistersWithdrawn = 5;
+    uint8 constant totalRegistersCancelled = 6; 
+    //number of ethers
+    uint8 constant totalEtherEver = 7;
+    uint8 constant totalEtherNow = 8;
+    uint8 constant totalEtherWithdrawn = 9;
+    uint8 constant totalEtherCancelled = 10;
+
+    
+/*********************************************Modifiers, Events, enums***************************************************************************/
+
+    modifier onlyCreator {
+        if (msg.sender != creator) 
+            revert();
+        _; 
+    }
+    //collectorCancelMonthly has its own code that makes sure people who have never contributed can't withdraw
+    modifier onlyCollectors {
+        if (msg.sender == creator) 
+            revert();
+        _;
+    }
+    
+    //owner is the Club who put the RegFactory on the blockchain 
+    //They have the ability to Fix contract ledger if there are mistakes
+    modifier onlyOwner {
+        if (msg.sender != owner) 
+            revert();
+        _;
+    }
+    
+    modifier notInMaintenance {
+        healthCheck();
+        if (maintenance_mode >= maintenance_Emergency) 
+            revert();
+        _;
+    }
+        
+    event LOG_SingleRegister (uint registerAmount, address registrar);
+    event LOG_CollectorContractCreated (address creator, address createdContract);
+    event LOG_ChangeToSingleCollectorStruct (uint totalRegisterStart, uint totalRemaining, address registrar);
+    event LOG_ChangeToFullLedger (uint allCollectorsEver, uint collectorsNow, uint totalRegistersEver, uint totalRegistersWithdrawn, uint totalRegistersCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn);
+    event LOG_ChangeToContractBalance (uint contractBalance);
+    event LOG_HealthCheck(bytes32 message, int diff, uint balance, uint ledgerBalance);
+
+
+
+/*********************************************HEALTH CHECK FUNCTIONS**************************************************************************/
+	
+
+    function healthCheck() internal {
+        // minus msg.value becuase the contract balance increases at start from payable functions, and ledger only decreases at end of payable function
+    	int diff = int(this.balance-msg.value) - int(ledger[totalEtherNow]);//needs to be int for negative
+		if (diff == 0) {
+			return; // everything is ok.
+		}
+		if (diff > 0) {
+			LOG_HealthCheck("Balance too high", diff, this.balance, ledger[totalEtherNow]);
+			maintenance_mode = maintenance_BalTooHigh;
+		} else {
+			LOG_HealthCheck("Balance too low", diff, this.balance, ledger[totalEtherNow]);
+			maintenance_mode = maintenance_Emergency;
+		}
+	}
+
+	// manually perform healthcheck.
+	// 		0 = reset maintenance_mode, even in emergency
+	// 		1 = perform health check
+	//    255 = set maintenance_mode to maintenance_emergency (no newPolicy
+	function performHealthCheck(uint8 _maintenance_mode) external onlyOwner {
+		maintenance_mode = _maintenance_mode;
+		if (maintenance_mode > 0 && maintenance_mode < maintenance_Emergency) {
+			healthCheck();
+		}
+	}
+    
+    // if the ledger gets corrupted, here it can be corrected by the owner
+	function auditLedger(uint8 _from, uint8 _to, uint _amount) external onlyOwner {
+
+		ledger[_from] -= uint(_amount);
+		ledger[_to] += uint(_amount);
+        LOG_ChangeToFullLedger (ledger[allCollectorsEver], ledger[collectorsNow], ledger[totalRegistersEver], ledger[totalRegistersWithdrawn], ledger[totalRegistersCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn]);
+	}
+    //if necessary ammend specific registrars struct
+    function auditCollector(uint _totalRemaining, uint _collectorID) external onlyOwner {
+
+        registrars[_collectorID].totalRemaining = _totalRemaining;
+        LOG_ChangeToSingleCollectorStruct(registrars[_collectorID].totalRegisterStart,  registrars[_collectorID].totalRemaining, registrars[_collectorID].registrar);
+
+    }
+	
+	
+	//owner can return money to a collector
+	//useful for testing test
+	function refundForMistake(address refundee, uint amount) external onlyOwner {
+
+        refundee.transfer(amount);
+		maintenance_mode = maintenance_Emergency; // don't allow any contributions or withdrawals
+        LOG_ChangeToContractBalance(this.balance);
+
+	}
+    
+/*********************************************CONSTRUCTOR FUNCTIONS AND MAIN FUNCTIONS**************************************************************************/
+
+     
+    // Registers should all be linked to the factory they were created with
+    function Register (bytes32 _name, uint _contractNumber) {
+        contractNumber = _contractNumber;
+        RegFactory pf = RegFactory(msg.sender);
+        name = _name;
+        creator = pf.getOriginalCreator(contractNumber); //need to get original creator, not the contract address, to approve the Club to set limits and withdraw
+        owner = pf.getOwner();
+        LOG_CollectorContractCreated(creator, this);
+    }
+
+    //allows Club to set what a collector pays to register an item
+    function setOneTimeContribution(uint setAmountInWei) external onlyCreator {
+        require(0 < setAmountInWei && setAmountInWei < 100 ether); //to prevent overflow and limit max register to 100 ether
+        regAmount = setAmountInWei;
+    }
+    
+    //allows payment of a one time registration to the Club
+    function oneTimeContribution() external payable onlyCollectors {
+        if (msg.value != regAmount) 
+            revert(); 
+        
+        creator.transfer(msg.value);
+        numberOfRegistrations++;
+        //note no log of event here because transfer goes directly to account. no ether value change in the contract 
+
+      }
+   
+    //Allows creator to withdraw payments from collectors
+    function creatorWithdrawPayments() external onlyCreator notInMaintenance {
+       
+       //if there is nothing to withdraw, revert.
+       if (ledger[totalEtherNow] <= 0) {
+           revert();
+       }
+            uint amountToWithdraw = ledger[totalEtherNow];
+            //deal with ether in ledger
+            ledger[totalEtherNow] -= amountToWithdraw;
+            ledger[totalEtherWithdrawn] += amountToWithdraw;
+            assert(ledger[totalEtherEver] == ledger[totalEtherNow]+ledger[totalEtherWithdrawn]);
+
+            creator.transfer(amountToWithdraw);
+            LOG_ChangeToContractBalance(this.balance);
+            LOG_ChangeToFullLedger (ledger[allCollectorsEver], ledger[collectorsNow], ledger[totalRegistersEver], ledger[totalRegistersWithdrawn], ledger[totalRegistersCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn]);
+     
+        }
+
+/*********************************************GETTER FUNCTIONS AND FALLBACK FUNCTION**************************************************************************/
+
+//ALL PUBLIC FUNCTIONS HAVE GETTERS
+
+    function getContractNumber() constant external returns (uint) {
+        return contractNumber;
+    }
+    function getContractBalance()  constant external returns(uint contractBalance) {
+        return this.balance;
+    }
+    function getTotalSingleContributors() constant external returns(uint _numberOfRegistrations) {
+        return numberOfRegistrations;
+    }
+    function getOwnerRegister() constant external returns (address _owner) {
+        return owner;
+    }
+    function getCollectorID(address collectorsAddress) constant external returns (uint _id) {
+        return collectorIDs[collectorsAddress];
+    }
+    //owner can only send, the fix any error in withdrawals
+    function () onlyOwner {}
+    
+    }//end contract
+
+/*********************************************FACTORY CONTRACT BELOW**************************************************************************/
+
+
+contract RegFactory {
+    bytes32[] public names;
+    address[] public newContracts;
+    address[] public originalCreators;
+    address public owner;
+    
+    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractCreator);
+    
+    //Owner is passed onto every Register Contract, so that owner can have power to adjust ledger
+    function RegFactory () {
+        owner = msg.sender;
+    }
+
+    //creates the register contract and saves important info within this contract
+    function createContract (bytes32 name) external {
+        //loop to prevent duplicate names of contracts created, to avoid confusion. 
+        for (uint32 i = 0; i<names.length; i++) {
+            assert(name != names[i]);
+        }
+        
+        uint contractNumber = newContracts.length;
+        originalCreators.push(msg.sender);
+        address newContract = new Register(name, contractNumber);
+        newContracts.push(newContract);
+        names.push(name);
+        
+        LOG_NewContractAddress (newContract, msg.sender);
+    } 
+
+
+    function getName(uint i) constant external returns(bytes32 contractName) {
+        return names[i];
+    }
+    function getContractAddressAtIndex(uint i) constant external returns(address contractAddress) {
+        return newContracts[i];
+    }
+    
+    function getOriginalCreator(uint i) constant external returns (address originalCreator) {
+        return originalCreators[i];
+    }
+
+    function getNameArray() constant external returns(bytes32[] contractName) {
+        return names;
+    }
+    function getContractAddressArray() constant external returns(address[] contractAddress) {
+        return newContracts;
+    }
+    
+    function getOriginalCreatorArray() constant external returns (address[] originalCreator) {
+        return originalCreators;
+    }
+    
+    function getOwner() constant external returns (address _owner) {
+        return owner;
+    }
+
+    function () {} //can't send ether with send unless payable modifier exists
+}
