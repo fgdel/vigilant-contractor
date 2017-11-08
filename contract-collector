@@ -8,7 +8,7 @@ contract Register {
     
 /*********************************************STATE VARIABLES***************************************************************************/
 
-    address public creator;
+    address public club;
     address public owner;
     bytes32 public name; //contract name 
     uint public regAmount;
@@ -50,15 +50,15 @@ contract Register {
     
 /*********************************************Modifiers, Events, enums***************************************************************************/
 
-    modifier onlyCreator {
-        if (msg.sender != creator) 
+    modifier onlyClub {
+        if (msg.sender != club) 
             revert();
         _; 
     }
 
 
     modifier onlyCollectors {
-        if (msg.sender == creator) 
+        if (msg.sender == club) 
             revert();
         _;
     }
@@ -150,13 +150,13 @@ contract Register {
         contractNumber = _contractNumber;
         RegFactory pf = RegFactory(msg.sender);
         name = _name;
-        creator = pf.getOriginalCreator(contractNumber); //need to get original creator, not the contract address, to approve the Club to set limits and withdraw
+        club = pf.getOriginalClub(contractNumber); //need to get original club, not the contract address, to approve the Club to set limits and withdraw
         owner = pf.getOwner();
-        LOG_CollectorContractCreated(creator, this);
+        LOG_CollectorContractCreated(club, this);
     }
 
     //allows Club to set what a collector pays to register an item
-    function setOneTimeContribution(uint setAmountInWei) external onlyCreator {
+    function setOneTimeContribution(uint setAmountInWei) external onlyClub {
         require(0 < setAmountInWei && setAmountInWei < 100 ether); //to prevent overflow and limit max register to 100 ether
         regAmount = setAmountInWei;
     }
@@ -172,8 +172,8 @@ contract Register {
 
       }
    
-    //Allows creator to withdraw payments from collectors
-    function creatorWithdrawPayments() external onlyCreator notInMaintenance {
+    //Allows club to withdraw payments from collectors
+    function clubWithdrawPayments() external onlyClub notInMaintenance {
        
        //if there is nothing to withdraw, revert.
        if (ledger[totalEtherNow] <= 0) {
@@ -221,10 +221,10 @@ contract Register {
 contract RegFactory {
     bytes32[] public names;
     address[] public newContracts;
-    address[] public originalCreators;
+    address[] public originalClubs;
     address public owner;
     
-    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractCreator);
+    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractClub);
     
     //Owner is passed onto every Register Contract, so that owner can have power to adjust ledger
     function RegFactory () {
@@ -239,7 +239,7 @@ contract RegFactory {
         }
         
         uint contractNumber = newContracts.length;
-        originalCreators.push(msg.sender);
+        originalClubs.push(msg.sender);
         address newContract = new Register(name, contractNumber);
         newContracts.push(newContract);
         names.push(name);
@@ -255,8 +255,8 @@ contract RegFactory {
         return newContracts[i];
     }
     
-    function getOriginalCreator(uint i) constant external returns (address originalCreator) {
-        return originalCreator[i];
+    function getOriginalClub(uint i) constant external returns (address originalClub) {
+        return originalClub[i];
     }
 
     function getNameArray() constant external returns(bytes32[] contractName) {
@@ -266,8 +266,8 @@ contract RegFactory {
         return newContracts;
     }
     
-    function getOriginalCreatorArray() constant external returns (address[] originalCreator) {
-        return originalCreators;
+    function getOriginalClubArray() constant external returns (address[] originalClub) {
+        return originalClubs;
     }
     
     function getOwner() constant external returns (address _owner) {
